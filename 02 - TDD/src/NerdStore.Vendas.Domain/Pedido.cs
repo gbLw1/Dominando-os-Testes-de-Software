@@ -1,4 +1,5 @@
-﻿using NerdStore.Core.DomainObjects;
+﻿using FluentValidation.Results;
+using NerdStore.Core.DomainObjects;
 
 namespace NerdStore.Vendas.Domain;
 
@@ -12,16 +13,61 @@ public class Pedido
         _pedidoItems = new List<PedidoItem>();
     }
 
-    public Guid ClienteId { get; set; }
+    public Guid ClienteId { get; private set; }
     public decimal ValorTotal { get; private set; }
+    public decimal Desconto { get; private set; }
     public PedidoStatus PedidoStatus { get; private set; }
+    public bool VoucherUtilizado { get; private set; }
+    public Voucher Voucher { get; private set; }
 
     private readonly List<PedidoItem> _pedidoItems;
     public IReadOnlyCollection<PedidoItem> PedidoItems => _pedidoItems.AsReadOnly();
 
+    public ValidationResult AplicarVoucher(Voucher voucher)
+    {
+        var result = voucher.ValidarSeAplicavel();
+        if (result.IsValid is false)
+        {
+            return result;
+        }
+
+        Voucher = voucher;
+        VoucherUtilizado = true;
+        CalcularValorTotalDesconto();
+
+        return result;
+    }
+
+    public void CalcularValorTotalDesconto()
+    {
+        if (VoucherUtilizado is false)
+        {
+            return;
+        }
+
+        decimal desconto = 0;
+
+        if (Voucher.TipoDescontoVoucher == TipoDescontoVoucher.Valor)
+        {
+            if (Voucher.ValorDesconto.HasValue)
+            {
+                desconto = Voucher.ValorDesconto.Value;
+            }
+        }
+        else
+        {
+            if (Voucher.PercentualDesconto.HasValue)
+            {
+                desconto = (ValorTotal * Voucher.PercentualDesconto.Value) / 100;
+            }
+        }
+
+        ValorTotal -= desconto;
+        Desconto = desconto;
+    }
 
     private void CalcularValorPedido()
-        => ValorTotal = PedidoItems.Sum(i => i.CalcularValor());
+    => ValorTotal = PedidoItems.Sum(i => i.CalcularValor());
 
     private bool PedidoExistente(PedidoItem item)
         => _pedidoItems.Any(p => p.ProdutoId == item.ProdutoId);
