@@ -5,27 +5,13 @@ namespace NerdStore.Vendas.Domain;
 
 public class Voucher
 {
-    //Codigo = "PROMO-15-REAIS",
     public string Codigo { get; private set; }
-
-    //PercentualDesconto = null,
     public decimal? PercentualDesconto { get; private set; }
-
-    //ValorDesconto = 15,
     public decimal? ValorDesconto { get; private set; }
-
     public TipoDescontoVoucher TipoDescontoVoucher { get; private set; }
-
-    //Quantidade = 1,
     public int Quantidade { get; private set; }
-
-    //DataValidade = DateTime.Now,
     public DateTime DataValidade { get; private set; }
-
-    //Ativo = true,
     public bool Ativo { get; private set; }
-
-    //Utilizado = false
     public bool Utilizado { get; private set; }
 
     public Voucher(string codigo, decimal? percentualDesconto, decimal? valorDesconto,
@@ -103,11 +89,4 @@ public class VoucherAplicavelValidation : AbstractValidator<Voucher>
     {
         return dataValidade >= DateTime.Now;
     }
-}
-
-
-public enum TipoDescontoVoucher
-{
-    Porcentagem = 0,
-    Valor = 1
 }
