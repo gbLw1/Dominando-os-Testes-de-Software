@@ -21,13 +21,17 @@ public class Pedido
 
 
     private void CalcularValorPedido()
-    {
-        ValorTotal = PedidoItems.Sum(i => i.CalcularValor());
-    }
+        => ValorTotal = PedidoItems.Sum(i => i.CalcularValor());
 
     private bool PedidoExistente(PedidoItem item)
+        => _pedidoItems.Any(p => p.ProdutoId == item.ProdutoId);
+
+    private void ValidarPedidoItemInexistente(PedidoItem item)
     {
-        return _pedidoItems.Any(p => p.ProdutoId == item.ProdutoId);
+        if (PedidoExistente(item) is false)
+        {
+            throw new DomainException("O item não existe no pedido");
+        }
     }
 
     private void ValidarQuantidadeItemPermitida(PedidoItem item)
@@ -63,10 +67,21 @@ public class Pedido
         CalcularValorPedido();
     }
 
-    public void TornarRascunho()
+    public void AtualizarItem(PedidoItem item)
     {
-        PedidoStatus = PedidoStatus.Rascunho;
+        ValidarPedidoItemInexistente(item);
+        ValidarQuantidadeItemPermitida(item);
+
+        var itemExistente = PedidoItems.FirstOrDefault(p => p.ProdutoId == item.ProdutoId);
+
+        _pedidoItems.Remove(itemExistente);
+        _pedidoItems.Add(item);
+
+        CalcularValorPedido();
     }
+
+    public void TornarRascunho()
+        => PedidoStatus = PedidoStatus.Rascunho;
 
     public static class PedidoFactory
     {
@@ -117,12 +132,8 @@ public class PedidoItem
     }
 
     internal void AdicionarUnidades(int unidades)
-    {
-        Quantidade += unidades;
-    }
+        => Quantidade += unidades;
 
     internal decimal CalcularValor()
-    {
-        return Quantidade * ValorUnitario;
-    }
+        => Quantidade * ValorUnitario;
 }
