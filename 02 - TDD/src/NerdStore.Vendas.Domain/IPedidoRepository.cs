@@ -1,7 +1,8 @@
-﻿namespace NerdStore.Vendas.Domain;
+﻿using NerdStore.Core.Data;
 
-public interface IPedidoRepository
+namespace NerdStore.Vendas.Domain;
+
+public interface IPedidoRepository : IRepository<Pedido>
 {
     void Adicionar(Pedido pedido);
-
 }
