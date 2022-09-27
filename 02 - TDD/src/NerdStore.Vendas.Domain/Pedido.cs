@@ -75,12 +75,12 @@ public class Pedido : Entity, IAggregateRoot
         CalcularValorTotalDesconto();
     }
 
-    private bool PedidoExistente(PedidoItem item)
+    public bool PedidoItemExistente(PedidoItem item)
         => _pedidoItems.Any(p => p.ProdutoId == item.ProdutoId);
 
     private void ValidarPedidoItemInexistente(PedidoItem item)
     {
-        if (PedidoExistente(item) is false)
+        if (PedidoItemExistente(item) is false)
         {
             throw new DomainException("O item não existe no pedido");
         }
@@ -89,7 +89,7 @@ public class Pedido : Entity, IAggregateRoot
     private void ValidarQuantidadeItemPermitida(PedidoItem item)
     {
         var quantidadeItens = item.Quantidade;
-        if (PedidoExistente(item))
+        if (PedidoItemExistente(item))
         {
             var itemExistente = _pedidoItems.FirstOrDefault(p => p.ProdutoId == item.ProdutoId);
             quantidadeItens += itemExistente.Quantidade;
@@ -105,7 +105,7 @@ public class Pedido : Entity, IAggregateRoot
     {
         ValidarQuantidadeItemPermitida(item);
 
-        if (PedidoExistente(item))
+        if (PedidoItemExistente(item))
         {
             var itemExistente = _pedidoItems.FirstOrDefault(p => p.ProdutoId == item.ProdutoId);
 
