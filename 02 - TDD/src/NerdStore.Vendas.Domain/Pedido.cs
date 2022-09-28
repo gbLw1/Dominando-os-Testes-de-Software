@@ -5,62 +5,60 @@ namespace NerdStore.Vendas.Domain;
 
 public class Pedido : Entity, IAggregateRoot
 {
+    // ReSharper disable once InconsistentNaming
     public static int MAX_UNIDADES_ITEM => 15;
     public static int MIN_UNIDADES_ITEM => 1;
+
+    public int Codigo { get; private set; }
+    public Guid ClienteId { get; private set; }
+    public Guid? VoucherId { get; private set; }
+    public decimal ValorTotal { get; private set; }
+    public PedidoStatus PedidoStatus { get; private set; }
+    public decimal Desconto { get; private set; }
+    public DateTime DataCadastro { get; private set; }
+    public bool VoucherUtilizado { get; private set; }
+    public Voucher Voucher { get; private set; }
+
+    private readonly List<PedidoItem> _pedidoItems;
+    public IReadOnlyCollection<PedidoItem> PedidoItems => _pedidoItems;
 
     protected Pedido()
     {
         _pedidoItems = new List<PedidoItem>();
     }
 
-    public Guid ClienteId { get; private set; }
-    public decimal ValorTotal { get; private set; }
-    public decimal Desconto { get; private set; }
-    public PedidoStatus PedidoStatus { get; private set; }
-    public bool VoucherUtilizado { get; private set; }
-    public Voucher Voucher { get; private set; }
-
-    private readonly List<PedidoItem> _pedidoItems;
-    public IReadOnlyCollection<PedidoItem> PedidoItems => _pedidoItems.AsReadOnly();
-
     public ValidationResult AplicarVoucher(Voucher voucher)
     {
-        var result = voucher.ValidarSeAplicavel();
-        if (result.IsValid is false)
-        {
-            return result;
-        }
+        var validationResult = voucher.ValidarSeAplicavel();
+        if (!validationResult.IsValid) return validationResult;
 
         Voucher = voucher;
         VoucherUtilizado = true;
-        CalcularValorTotalDesconto();
+        CalcularValorPedido();
 
-        return result;
+        return validationResult;
     }
 
     public void CalcularValorTotalDesconto()
     {
-        if (VoucherUtilizado is false)
-        {
-            return;
-        }
+        if (!VoucherUtilizado) return;
 
         decimal desconto = 0;
         var valor = ValorTotal;
 
-        if (Voucher.TipoDescontoVoucher == TipoDescontoVoucher.Valor)
+        if (Voucher.TipoDescontoVoucher == TipoDescontoVoucher.Porcentagem)
         {
-            if (Voucher.ValorDesconto.HasValue)
+            if (Voucher.PercentualDesconto.HasValue)
             {
-                desconto = Voucher.ValorDesconto.Value;
+                desconto = (valor * Voucher.PercentualDesconto.Value) / 100;
                 valor -= desconto;
             }
         }
         else
         {
-            if (Voucher.PercentualDesconto.HasValue)
+            if (Voucher.ValorDesconto.HasValue)
             {
-                desconto = (ValorTotal * Voucher.PercentualDesconto.Value) / 100;
+                desconto = Voucher.ValorDesconto.Value;
                 valor -= desconto;
             }
         }
@@ -69,46 +67,43 @@ public class Pedido : Entity, IAggregateRoot
         Desconto = desconto;
     }
 
-    private void CalcularValorPedido()
+    public void CalcularValorPedido()
     {
-        ValorTotal = PedidoItems.Sum(i => i.CalcularValor());
+        ValorTotal = PedidoItems.Sum(p => p.CalcularValor());
         CalcularValorTotalDesconto();
     }
 
     public bool PedidoItemExistente(PedidoItem item)
-        => _pedidoItems.Any(p => p.ProdutoId == item.ProdutoId);
+    {
+        return _pedidoItems.Any(p => p.ProdutoId == item.ProdutoId);
+    }
 
     private void ValidarPedidoItemInexistente(PedidoItem item)
     {
-        if (PedidoItemExistente(item) is false)
-        {
-            throw new DomainException("O item não existe no pedido");
-        }
+        if (!PedidoItemExistente(item)) throw new DomainException("O item não pertence ao pedido");
     }
 
     private void ValidarQuantidadeItemPermitida(PedidoItem item)
     {
-        var quantidadeItens = item.Quantidade;
+        var quantidadeItems = item.Quantidade;
         if (PedidoItemExistente(item))
         {
             var itemExistente = _pedidoItems.FirstOrDefault(p => p.ProdutoId == item.ProdutoId);
-            quantidadeItens += itemExistente.Quantidade;
+            quantidadeItems += itemExistente.Quantidade;
         }
 
-        if (quantidadeItens > MAX_UNIDADES_ITEM)
-        {
-            throw new DomainException($"Máximo de {MAX_UNIDADES_ITEM} unidades por produto");
-        }
+        if (quantidadeItems > MAX_UNIDADES_ITEM) throw new DomainException($"Máximo de {MAX_UNIDADES_ITEM} unidades por produto.");
     }
 
     public void AdicionarItem(PedidoItem item)
     {
         ValidarQuantidadeItemPermitida(item);
 
+        item.AssociarPedido(Id);
+
         if (PedidoItemExistente(item))
         {
             var itemExistente = _pedidoItems.FirstOrDefault(p => p.ProdutoId == item.ProdutoId);
-
             itemExistente.AdicionarUnidades(item.Quantidade);
             item = itemExistente;
 
@@ -119,10 +114,19 @@ public class Pedido : Entity, IAggregateRoot
         CalcularValorPedido();
     }
 
-    public void AtualizarItem(PedidoItem item)
+    public void RemoverItem(PedidoItem item)
     {
         ValidarPedidoItemInexistente(item);
+
+        _pedidoItems.Remove(item);
+        CalcularValorPedido();
+    }
+
+    public void AtualizarItem(PedidoItem item)
+    {
         ValidarQuantidadeItemPermitida(item);
+        ValidarPedidoItemInexistente(item);
+        item.AssociarPedido(Id);
 
         var itemExistente = PedidoItems.FirstOrDefault(p => p.ProdutoId == item.ProdutoId);
 
@@ -132,17 +136,16 @@ public class Pedido : Entity, IAggregateRoot
         CalcularValorPedido();
     }
 
-    public void RemoverItem(PedidoItem item)
+    public void AtualizarUnidades(PedidoItem item, int unidades)
     {
-        ValidarPedidoItemInexistente(item);
-
-        _pedidoItems.Remove(item);
-
-        CalcularValorPedido();
+        item.AtualizarUnidades(unidades);
+        AtualizarItem(item);
     }
 
     public void TornarRascunho()
-        => PedidoStatus = PedidoStatus.Rascunho;
+    {
+        PedidoStatus = PedidoStatus.Rascunho;
+    }
 
     public static class PedidoFactory
     {
